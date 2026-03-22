@@ -1,11 +1,14 @@
 #define TINY_VK_IMPLEMENTATION
 #include "tinyvk.h"
+#include "kernel.slang.h"
 
 int main()
 {
+    // Context contains all the essentials
     TvkContext context = {};
     tvkCreateContext(TVK_CREATE_CONTEXT_ENABLE_VALIDATION, &context);
 
+    // DescriptorSetBuilder provides a simple effective way to create descriptor sets!
     TvkDescriptorSetBuilder builder = {};
     tvkSetBuilderAppend(&builder, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1);
     tvkSetBuilderCreate(context.device, VK_SHADER_STAGE_COMPUTE_BIT, 1, &builder);
@@ -18,10 +21,10 @@ int main()
     };
     vkCreatePipelineLayout(context.device, &layout_info, 0, &pipeline_layout);
 
-    VkShaderModule shader = 0;
-    tvkCreateShaderFromFile(context.device, "kernel.spv", &shader);
-
+    // Create Compute Pipeline!
     VkPipeline pipeline = 0;
+    VkShaderModule shader = 0;
+    tvkCreateShaderFromMemory(context.device, (void*)(data), data_sizeInBytes, &shader);
     tvkCreateComputePipeline(context.device, pipeline_layout, shader, &pipeline);
     vkDestroyShaderModule(context.device, shader, 0);
 
@@ -41,7 +44,6 @@ int main()
     
     VkDescriptorSet set = 0;
     tvkSetBuilderAllocate(context.device, &builder, &set);
-
     VkWriteDescriptorSet writes[] = {
         tvkSetBuilderWrite(&builder, set, 0, buffer),
     };
@@ -49,12 +51,10 @@ int main()
 
     VkCommandBuffer cmd = 0;
     tvkAllocateCommandBuffer(context.device, context.command_pool, 0, &cmd);
-
     tvkBeginCommandBuffer(cmd, 0);
     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
     vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline_layout, 0, 1, &set, 0, 0);
     vkCmdDispatch(cmd, tvkCeilDiv(N, 64), 1, 1);
-
     vkEndCommandBuffer(cmd);
     tvkQueueSumbitSingle(context.queue, cmd, 0);
     vkQueueWaitIdle(context.queue);

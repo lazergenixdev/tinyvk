@@ -1,0 +1,10 @@
+
+# Build artifacts
+bin/
+build
+build.exe
+build.old
+build.exe.old
+
+# Generated shader binaries
+examples/*/*.h

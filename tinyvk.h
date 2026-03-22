@@ -142,6 +142,7 @@ TVKDEF VkResult tvkBeginCommandBuffer(VkCommandBuffer cmd, VkCommandBufferUsageF
 TVKDEF VkResult tvkCreateCommandPool(VkDevice device, VkFlags flags, VkCommandPool *pool);
 TVKDEF VkResult tvkQueueSumbitSingle(VkQueue queue, VkCommandBuffer buffer, VkFence fence);
 TVKDEF VkResult tvkCreateShaderFromFile(VkDevice device, const char* filename, VkShaderModule *shader);
+TVKDEF VkResult tvkCreateShaderFromMemory(VkDevice device, void *data, size_t size, VkShaderModule *shader);
 TVKDEF uint32_t tvkFindMemoryType(VkPhysicalDevice physical_device, uint32_t mask, VkFlags required_properties);
 TVKDEF VkResult tvkAllocateCommandBuffer(VkDevice device, VkCommandPool pool, VkFlags flags, VkCommandBuffer *command_buffer);
 TVKDEF VkResult tvkCreateSingleSetLayout(VkDevice device, VkDescriptorType type, VkShaderStageFlags stages, VkDescriptorSetLayout *layout);
@@ -382,6 +383,16 @@ TVKDEF VkResult tvkCreateShaderFromFile(VkDevice device, const char* filename, V
     VkResult result = vkCreateShaderModule(device, &shader_info, 0, shader);
     TVK_FREE(data);
     return result;
+}
+
+TVKDEF VkResult tvkCreateShaderFromMemory(VkDevice device, void *data, size_t size, VkShaderModule *shader)
+{
+    VkShaderModuleCreateInfo shader_info = {
+        .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize = size,
+        .pCode = (uint32_t*)(data),
+    };
+    return vkCreateShaderModule(device, &shader_info, 0, shader);
 }
 
 TVKDEF VkResult tvkCreateComputePipeline(VkDevice device, VkPipelineLayout layout, VkShaderModule shader, VkPipeline *pipeline)
