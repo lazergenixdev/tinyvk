@@ -144,7 +144,7 @@ TVKDEF VkResult tvkQueueSumbitSingle(VkQueue queue, VkCommandBuffer buffer, VkFe
 TVKDEF VkResult tvkCreateShaderFromFile(VkDevice device, const char* filename, VkShaderModule *shader);
 TVKDEF VkResult tvkCreateShaderFromMemory(VkDevice device, void *data, size_t size, VkShaderModule *shader);
 TVKDEF uint32_t tvkFindMemoryType(VkPhysicalDevice physical_device, uint32_t mask, VkFlags required_properties);
-TVKDEF VkResult tvkAllocateCommandBuffer(VkDevice device, VkCommandPool pool, VkFlags flags, VkCommandBuffer *command_buffer);
+TVKDEF VkResult tvkAllocateCommandBuffer(VkDevice device, VkCommandPool pool, VkCommandBuffer *command_buffer);
 TVKDEF VkResult tvkCreateSingleSetLayout(VkDevice device, VkDescriptorType type, VkShaderStageFlags stages, VkDescriptorSetLayout *layout);
 TVKDEF VkResult tvkCreateComputePipeline(VkDevice device, VkPipelineLayout layout, VkShaderModule shader, VkPipeline *pipeline);
 
@@ -424,7 +424,7 @@ TVKDEF VkFence tvkCreateFence(VkDevice device, VkFlags flags)
     return fence;
 }
 
-TVKDEF VkResult tvkAllocateCommandBuffer(VkDevice device, VkCommandPool pool, VkFlags flags, VkCommandBuffer *command_buffer)
+TVKDEF VkResult tvkAllocateCommandBuffer(VkDevice device, VkCommandPool pool, VkCommandBuffer *command_buffer)
 {
     VkCommandBufferAllocateInfo allocate_info = {
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,

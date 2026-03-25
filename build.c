@@ -9,11 +9,13 @@
 
 Cmd cmd;
 const char* vulkan_sdk_path;
+const char* slangc;
 
 bool setup_vulkan(const char* output_dir)
 {
 	vulkan_sdk_path = getenv("VULKAN_SDK");
 	assert(vulkan_sdk_path && "Ensure `VULKAN_SDK` environment variable points to your local Vulkan SDK!");
+	slangc = temp_sprintf("%s/bin/slangc", vulkan_sdk_path);
 #if defined(_WIN32)
 	return true;
 #elif defined(__APPLE__)
@@ -41,7 +43,6 @@ void add_vulkan(Cmd *cmd)
 
 bool build_example(Walk_Entry entry)
 {
-	// Do nothing for examples/ directory
 	if (entry.level == 0 || entry.type != NOB_FILE_DIRECTORY)
 		return true;
 	
@@ -50,7 +51,6 @@ bool build_example(Walk_Entry entry)
 		*entry.action = WALK_SKIP;
 	}
 
-
 	String_View name = sv_from_cstr(entry.path);
 	sv_chop_by_delim(&name, '/');
 
@@ -58,7 +58,6 @@ bool build_example(Walk_Entry entry)
 
 	File_Paths children = {};
 	assert(read_entire_dir(entry.path, &children));
-
 	for (int i = 0; i < children.count; ++i)
 	{
 		String_View filename = sv_from_cstr(children.items[i]);
@@ -67,7 +66,7 @@ bool build_example(Walk_Entry entry)
 
 		const char* shader_path = temp_sprintf("%s/%s", entry.path, children.items[i]);
 
-		cmd_append(&cmd, "slangc");
+		cmd_append(&cmd, slangc);
 		cmd_append(&cmd, "-target", "spirv");
 		cmd_append(&cmd, "-source-embed-style", "u32");
 		cmd_append(&cmd, shader_path);
@@ -81,7 +80,6 @@ bool build_example(Walk_Entry entry)
 
 	cmd_append(&cmd, "clang", "-std=c99");
 	cmd_append(&cmd, "-Wall", "-Wextra"); // Extra warnings
-	cmd_append(&cmd, "-Wno-unused-parameter"); // Not ideal
 	cmd_append(&cmd, "-g"); // Debug flags
 	cmd_append(&cmd, "-I.");
 #if defined(_WIN32)
