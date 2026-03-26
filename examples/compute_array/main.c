@@ -56,7 +56,7 @@ int main()
     vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline_layout, 0, 1, &set, 0, 0);
     vkCmdDispatch(cmd, tvkCeilDiv(N, 64), 1, 1);
     vkEndCommandBuffer(cmd);
-    tvkQueueSumbitSingle(context.queue, cmd, 0);
+    tvkQueueSumbitSingleWithFence(context.queue, cmd, 0);
     vkQueueWaitIdle(context.queue);
 
     float *gpu_data = 0;

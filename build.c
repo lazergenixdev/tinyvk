@@ -3,8 +3,10 @@
 
 #ifdef _WIN32
 #	define EXT ".exe"
+#	define DIR '\\'
 #else
 #	define EXT ""
+#	define DIR '/'
 #endif
 
 Cmd cmd;
@@ -52,7 +54,7 @@ bool build_example(Walk_Entry entry)
 	}
 
 	String_View name = sv_from_cstr(entry.path);
-	sv_chop_by_delim(&name, '/');
+	sv_chop_by_delim(&name, DIR);
 
 	// Compile shaders
 

@@ -76,6 +76,10 @@ LICENSE
 #include "stdbool.h"
 #include "memory.h"
 
+#if defined(_WIN32)
+#	define alloca _alloca
+#endif
+
 enum {
     TVK_MEMORY_USAGE_SHARED = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
     TVK_MEMORY_USAGE_HOST   = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
@@ -131,6 +135,8 @@ typedef struct {
 TVKDEF VkResult tvkCreateContext(TvkFlags flags, TvkContext *context);
 TVKDEF void tvkDestroyContext(TvkContext* context);
 
+TVKDEF VkResult tvkCreateSwapChain(TvkContext *context, VkSurfaceKHR surface, TvkSwapChain *swap_chain);
+
 TVKDEF VkResult tvkSetBuilderCreate(VkDevice device, VkShaderStageFlags stages, uint32_t max_sets, TvkDescriptorSetBuilder *block);
 TVKDEF void tvkSetBuilderDestroy(VkDevice device, TvkDescriptorSetBuilder *builder);
 TVKDEF void tvkSetBuilderAppend(TvkDescriptorSetBuilder *builder, VkDescriptorType type, uint32_t count);
@@ -140,7 +146,8 @@ TVKDEF VkWriteDescriptorSet tvkSetBuilderWrite(TvkDescriptorSetBuilder *builder,
 TVKDEF VkFence  tvkCreateFence(VkDevice device, VkFlags flags);
 TVKDEF VkResult tvkBeginCommandBuffer(VkCommandBuffer cmd, VkCommandBufferUsageFlags flags);
 TVKDEF VkResult tvkCreateCommandPool(VkDevice device, VkFlags flags, VkCommandPool *pool);
-TVKDEF VkResult tvkQueueSumbitSingle(VkQueue queue, VkCommandBuffer buffer, VkFence fence);
+TVKDEF VkResult tvkQueueSumbitSingleWithFence(VkQueue queue, VkCommandBuffer buffer, VkFence fence);
+TVKDEF VkResult tvkQueueSumbitSingle(VkQueue queue, VkCommandBuffer command_buffer, VkSemaphore wait, VkSemaphore signal);
 TVKDEF VkResult tvkCreateShaderFromFile(VkDevice device, const char* filename, VkShaderModule *shader);
 TVKDEF VkResult tvkCreateShaderFromMemory(VkDevice device, void *data, size_t size, VkShaderModule *shader);
 TVKDEF uint32_t tvkFindMemoryType(VkPhysicalDevice physical_device, uint32_t mask, VkFlags required_properties);
@@ -463,6 +470,10 @@ TVKDEF VkResult tvkCreateBuffer(TvkContext *context, VkBufferCreateInfo *buffer_
                                 TvkFlags memory_usage, VkBuffer *buffer, VkDeviceMemory *memory)
 {
     VkResult result = VK_SUCCESS;
+	if (memory_usage == TVK_MEMORY_USAGE_DEVICE && initial_data != 0)
+	{
+		buffer_info->usage |= VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+	}
     TVK_TRY(vkCreateBuffer(context->device, buffer_info, 0, buffer));
     VkMemoryRequirements requirements = {};
     vkGetBufferMemoryRequirements(context->device, *buffer, &requirements);
@@ -484,6 +495,67 @@ TVKDEF VkResult tvkCreateBuffer(TvkContext *context, VkBufferCreateInfo *buffer_
             memcpy(gpu_data, initial_data, buffer_info->size);
             vkUnmapMemory(context->device, *memory);
         }
+		if (memory_usage == TVK_MEMORY_USAGE_DEVICE)
+		{
+			VkBuffer       staging_buffer = 0;
+			VkDeviceMemory staging_memory = 0;
+
+			VkBufferCreateInfo staging_buffer_info = {
+				.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+				.size = buffer_info->size,
+				.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+			};
+			TVK_TRY(vkCreateBuffer(context->device, &staging_buffer_info, 0, &staging_buffer));
+
+			VkMemoryAllocateInfo allocate_info = {
+				.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+				.allocationSize = requirements.size,
+				.memoryTypeIndex = tvkFindMemoryType(context->physical_device, requirements.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT),
+			};
+			TVK_TRY(vkAllocateMemory(context->device, &allocate_info, 0, &staging_memory));
+			TVK_TRY(vkBindBufferMemory(context->device, staging_buffer, staging_memory, 0));
+			{
+				float *gpu_data = 0;
+				vkMapMemory(context->device, staging_memory, 0, VK_WHOLE_SIZE, 0, (void**)&gpu_data);
+				memcpy(gpu_data, initial_data, buffer_info->size);
+				vkUnmapMemory(context->device, staging_memory);
+			}
+
+			VkCommandBuffer cmd = 0;
+			VkCommandBufferAllocateInfo command_buffer_info = {
+				.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+				.commandBufferCount = 1,
+				.commandPool = context->command_pool,
+				.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+			};
+			vkAllocateCommandBuffers(context->device, &command_buffer_info, &cmd);
+			{
+				VkCommandBufferBeginInfo beginInfo = {
+					.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+					.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+				};
+				vkBeginCommandBuffer(cmd, &beginInfo);
+				VkBufferCopy region = {
+					.srcOffset = 0,
+					.dstOffset = 0,
+					.size = buffer_info->size,
+				};
+				vkCmdCopyBuffer(cmd, staging_buffer, *buffer, 1, &region);
+				vkEndCommandBuffer(cmd);
+
+				VkSubmitInfo submitInfo = {
+					.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+					.commandBufferCount = 1,
+					.pCommandBuffers = &cmd,
+				};
+				vkQueueSubmit(context->queue, 1, &submitInfo, VK_NULL_HANDLE);
+
+				vkQueueWaitIdle(context->queue);
+				vkDestroyBuffer(context->device, staging_buffer, 0);
+				vkFreeMemory(context->device, staging_memory, 0);
+			}
+			vkFreeCommandBuffers(context->device, context->command_pool, 1, &cmd);
+		}
     }
     return VK_SUCCESS;
 }
@@ -525,7 +597,7 @@ TVKDEF VkResult tvkCreateImageView(VkDevice device, VkImageCreateInfo *image_inf
     return vkCreateImageView(device, &view_info, 0, view);
 }
 
-TVKDEF VkResult tvkQueueSumbitSingle(VkQueue queue, VkCommandBuffer command_buffer, VkFence fence)
+TVKDEF VkResult tvkQueueSumbitSingleWithFence(VkQueue queue, VkCommandBuffer command_buffer, VkFence fence)
 {
     VkSubmitInfo submit = {
         .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
@@ -533,6 +605,22 @@ TVKDEF VkResult tvkQueueSumbitSingle(VkQueue queue, VkCommandBuffer command_buff
         .pCommandBuffers = &command_buffer,
     };
     return vkQueueSubmit(queue, 1, &submit, fence);
+}
+
+TVKDEF VkResult tvkQueueSumbitSingle(VkQueue queue, VkCommandBuffer command_buffer, VkSemaphore wait, VkSemaphore signal)
+{
+	VkPipelineStageFlags wait_mask = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
+    VkSubmitInfo submit = {
+		.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+		.waitSemaphoreCount = 1,
+		.pWaitSemaphores = &wait,
+		.pWaitDstStageMask = &wait_mask,
+		.commandBufferCount = 1,
+		.pCommandBuffers = &command_buffer,
+		.signalSemaphoreCount = 1,
+		.pSignalSemaphores = &signal,
+    };
+    return vkQueueSubmit(queue, 1, &submit, 0);
 }
 
 TVKDEF VkResult tvkCreateContext(TvkFlags flags, TvkContext *context)
@@ -565,6 +653,65 @@ TVKDEF void tvkDestroyContext(TvkContext* context)
     if (context->device) vkDestroyDevice(context->device, 0);
     if (context->instance) vkDestroyInstance(context->instance, 0);
     memset(context, 0, sizeof(TvkContext));
+}
+
+TVKDEF VkResult tvkCreateSwapChain(TvkContext *context, VkSurfaceKHR surface, TvkSwapChain *swap_chain)
+{
+	VkSurfaceCapabilitiesKHR capabilities;
+	assert(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(context->physical_device, surface, &capabilities) == VK_SUCCESS);
+	swap_chain->extent = capabilities.currentExtent;
+	assert(swap_chain->extent.width != 0 || swap_chain->extent.height != 0);
+
+	VkSurfaceFormatKHR surface_format;
+	uint32_t count = 1;
+	// NOTE: We only care if this function doesn't fail (return code >= 0)
+	assert(vkGetPhysicalDeviceSurfaceFormatsKHR(context->physical_device, surface, &count, &surface_format) >= 0);
+	swap_chain->format = VK_FORMAT_B8G8R8A8_UNORM;
+	
+	VkSwapchainCreateInfoKHR swap_chain_info = {
+		.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
+		.surface = surface,
+		.minImageCount = capabilities.minImageCount + 1,
+		.imageFormat = swap_chain->format,
+		.imageColorSpace = surface_format.colorSpace,
+		.imageExtent = swap_chain->extent,
+		.imageArrayLayers = 1, /* For non-stereoscopic-3D applications (non-VR), this value is 1 */
+		.imageUsage = capabilities.supportedUsageFlags,
+		.preTransform = capabilities.currentTransform,
+		.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
+		.presentMode = VK_PRESENT_MODE_FIFO_KHR,
+		.clipped = VK_TRUE, /* "... allows more efficient presentation methods to be used on some platforms." */
+	};
+
+	VkSwapchainKHR _swap_chain = 0;
+	assert(vkCreateSwapchainKHR(context->device, &swap_chain_info, 0, &_swap_chain) == VK_SUCCESS);
+	swap_chain->swap_chain = _swap_chain;
+
+	assert(vkGetSwapchainImagesKHR(context->device, _swap_chain, &swap_chain->image_count, 0) == VK_SUCCESS);
+	assert(swap_chain->image_count > 0);
+	assert(swap_chain->image_count <= TVK_MAX_SWAP_CHAIN_IMAGES);
+	assert(vkGetSwapchainImagesKHR(context->device, _swap_chain, &swap_chain->image_count, swap_chain->images) == VK_SUCCESS);
+
+	for (uint32_t i = 0; i < swap_chain->image_count; ++i)
+	{
+		VkImageViewCreateInfo view_info = {
+			.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+			.flags = 0,
+			.image = swap_chain->images[i],
+			.viewType = VK_IMAGE_VIEW_TYPE_2D,
+			.format = swap_chain->format,
+			.components = {}, // Identity
+			.subresourceRange = {
+				.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+				.baseMipLevel = 0,
+				.levelCount = 1,
+				.baseArrayLayer = 0,
+				.layerCount = 1,
+			}
+		};
+		assert(vkCreateImageView(context->device, &view_info, 0, swap_chain->image_views + i) == VK_SUCCESS);
+	}
+	return VK_SUCCESS;
 }
 
 TVKDEF void tvkSetBuilderAppend(TvkDescriptorSetBuilder *builder, VkDescriptorType type, uint32_t count)
