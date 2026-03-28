@@ -8,4 +8,4 @@ build.old
 build.exe.old
 
 # Generated shader binaries
-examples/*/*.h
+*.slang.h

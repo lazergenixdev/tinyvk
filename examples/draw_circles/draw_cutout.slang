@@ -27,5 +27,9 @@ VSOutput main(in Vertex vertex)
 [shader("fragment")]
 float4 main(in VSOutput input)
 {
+    if (dot(input.position, input.position) > 1)
+    {
+        discard;
+	}
     return input.color;
 }

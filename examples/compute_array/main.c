@@ -50,7 +50,7 @@ int main()
     vkUpdateDescriptorSets(context.device, TVK_ARRAY_COUNT(writes), writes, 0, 0);
 
     VkCommandBuffer cmd = 0;
-    tvkAllocateCommandBuffer(context.device, context.command_pool, &cmd);
+    tvkAllocateCommandBuffers(context.device, context.command_pool, 1, &cmd);
     tvkBeginCommandBuffer(cmd, 0);
     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
     vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline_layout, 0, 1, &set, 0, 0);
