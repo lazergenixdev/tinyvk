@@ -28,7 +28,7 @@ typedef enum {
     tric_Method_Naive,
     tric_Method_Fan,
     tric_Method_Strip,
-    tric_Method_Quad,
+    tric_Method_Quad_Fan,
     tric_Method_Max_Area,
     tric_Method_COUNT,
 } tric_Method;
@@ -74,7 +74,7 @@ static inline void tric_memory_requirements(tric_Method method, int lod, tric_Bu
         }
         break;
 
-        case tric_Method_Quad:
+        case tric_Method_Quad_Fan:
         {
             // Needs to be multiple of 4, hard-coded for 0 and 1
             switch (lod) {
@@ -231,7 +231,7 @@ static inline void tric_triangulate(tric_Method method, int lod, const tric_Buff
         }
         break;
 
-        case tric_Method_Quad:
+        case tric_Method_Quad_Fan:
         {
             uint32_t n = buffers->VertexCount;
 

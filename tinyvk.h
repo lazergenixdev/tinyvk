@@ -38,6 +38,10 @@ LICENSE
 #define TVK_DEVICE_EXTENSIONS
 #endif
 
+#ifndef TVK_ENABLED_DEVICE_FEATURES
+#define TVK_ENABLED_DEVICE_FEATURES
+#endif
+
 #ifndef TVK_MAX_SWAP_CHAIN_IMAGES
 #define TVK_MAX_SWAP_CHAIN_IMAGES 16
 #endif
@@ -338,6 +342,9 @@ TVKDEF VkResult tvkCreateDevice(VkPhysicalDevice physical_device, TvkQueueFamili
         TVK_DEVICE_EXTENSIONS
     };
 
+	VkPhysicalDeviceFeatures enabled_features = {
+		TVK_ENABLED_DEVICE_FEATURES
+	};
     VkDeviceCreateInfo device_info = {
         .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
         .pNext = 0, /* TODO: Device features */
@@ -345,6 +352,7 @@ TVKDEF VkResult tvkCreateDevice(VkPhysicalDevice physical_device, TvkQueueFamili
         .pQueueCreateInfos = queue_infos,
         .enabledExtensionCount = TVK_ARRAY_COUNT(extensions),
         .ppEnabledExtensionNames = extensions,
+		.pEnabledFeatures = &enabled_features,
     };
     TVK_TRY(vkCreateDevice(physical_device, &device_info, 0, device));
 
